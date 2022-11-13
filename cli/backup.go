@@ -2,15 +2,16 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
-	"fmt"
 	"syscall"
-	"time"
+
+	"github.com/jonathongardner/bhoto/fileInventory"
+	"github.com/jonathongardner/bhoto/hub"
 
 	"github.com/urfave/cli/v2"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 )
 
 var backupCommand =  &cli.Command{
@@ -22,8 +23,22 @@ var backupCommand =  &cli.Command{
 			Name:    "folder",
 			Aliases: []string{"f"},
 			Value:   "",
-			Usage:   "Folder to look for photos to backup (default: current directory)",
+			DefaultText: "./",
+			Usage:   "Folder to look for photos to backup",
 			EnvVars: []string{"BOTO_FOLDER"},
+		},
+		&cli.IntFlag{
+			Name:    "max",
+			Aliases: []string{"m"},
+			Value:   10,
+			Usage:   "Max number of files to process",
+			EnvVars: []string{"BOTO_MAX_FILES"},
+			Action: func(ctx *cli.Context, v int) error {
+				if 0 >= v {
+					return fmt.Errorf("Flag max number of files to process %v must be greater than 0", v)
+				}
+				return nil
+			},
 		},
 	},
 	Action:  func(c *cli.Context) error {
@@ -36,9 +51,23 @@ var backupCommand =  &cli.Command{
 			}
 		}
 
+		maxNumberOfFileProcessors := c.Int("max")
+
 		log.Infof("Starting %v...", folder)
 
 		ctx, cancel := context.WithCancel(context.Background())
+
+		dbPath, err := getDatabasePath(c)
+		if err != nil {
+			return err
+		}
+
+		fin, err := fileInventory.NewFin()
+		if err != nil {
+			return err
+		}
+		defer fin.Close()
+		go fin.StartDB(dbPath)
 
 		// listen for ctrl + c and gracefully shutdown
 		go func() {
@@ -49,38 +78,11 @@ var backupCommand =  &cli.Command{
 			log.Info("Gracefully Shuting down...")
 			cancel()
 		}()
-		g, gCtx := errgroup.WithContext(ctx) // gCtx
 
-		g.Go(func() error {
-			for i := 1; i < 5; i++ {
-				log.Infof("Hello %v", i)
-			}
-			return nil
-		})
-		g.Go(func() error {
-			i := 0
-			for {
-				select {
-				case <- gCtx.Done():
-					return nil
-				default:
-					if i >= 10 {
-						return fmt.Errorf("You took to long!")
-					}
-					time.Sleep(1 * time.Second)
-					i++
-				}
-			}
 
-		})
+		h := hub.NewHub(folder, fin)
+		go h.Process(ctx, maxNumberOfFileProcessors)
 
-		// now wait to see if any errors are raised, if one is raised than it will call cancel and end
-		if err := g.Wait(); err != nil {
-			return err
-		}
-
-		log.Info("...Closing")
-
-		return nil
+		return h.Wait()
 	},
 }
