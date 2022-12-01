@@ -1,64 +1,130 @@
 package fileInventory
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
-  "github.com/jonathongardner/bhoto/dirEntry"
+	"github.com/jonathongardner/bhoto/routines"
 
-	"github.com/gabriel-vasile/mimetype"
 	log "github.com/sirupsen/logrus"
 )
 
-// 100 MB
-// TODO: Config
-const maxFileSize int64 = 100 * 1024 *1024
-
 type Fin struct {
-	db chan dbRunner
+	path string
+	db   chan dbRunner
 }
 
-func NewFin() (*Fin, error) {
-	return &Fin{db: make(chan dbRunner, 5)}, nil
+type dbRunner interface {
+	Run(db *sql.DB) error
 }
 
-func (f *Fin) Close() error {
-	close(f.db)
+func NewFin(path string) (*Fin, error) {
+	return &Fin{db: make(chan dbRunner, 5), path: path}, nil
+}
+
+func (f *Fin) dbExist() bool {
+	_, err := os.Stat(f.path)
+	return err == nil
+}
+
+// only run one cause dont want mulitple sqlite dbs open
+func (f *Fin) Run(rc *routines.Controller) error {
+	if !f.dbExist() {
+		return fmt.Errorf("database doesn't exist (%v)", f.path)
+	}
+
+	db, _ := sql.Open("sqlite3", f.path)
+	defer db.Close()
+
+	count := uint64(0)
+	f1: for {
+		select {
+		case dbRunner := <- f.db:
+			err := dbRunner.Run(db)
+			if err != nil {
+				log.Errorf("Error adding to db %v", err)
+			}
+			count += 1
+			if count % 100 == 0 {
+				log.Infof("Processed %v", count)
+			}
+		case <- rc.Done():
+			log.Infof("Processed %v", count)
+			break f1
+		}
+	}
 	return nil
 }
 
-// return a list of DirEntry's to add if any
-func (fin *Fin) ProcessDirEntry(de dirEntry.DirEntry) ([]dirEntry.DirEntry, error) {
-  if de.IsDir {
-    return de.Children()
-  }
-
-	if de.Size > maxFileSize {
-		log.Infof("Skipping %v larging then max size (%v - %v)", de.Path, de.Size, maxFileSize)
-		return nil, nil
+func SetupDB(path string) (error) {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("database already exist (%v)", path)
 	}
 
-	fileBytes, err := os.ReadFile(de.Path)
+	log.Infof("Creating database at %v", path)
+	file, err := os.Create(path)
 	if err != nil {
-		return nil, fmt.Errorf("Error opening directory entry (%v)", err)
+		return fmt.Errorf("error opneing database (%v - %v)", path, err)
 	}
+	file.Close()
 
-	mtype := mimetype.Detect(fileBytes)
-	if !strings.HasPrefix(mtype.String(), "image") {
-		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
-		return nil, nil
+	log.Info("Opening database")
+	db, _ := sql.Open("sqlite3", path)
+	defer db.Close()
+
+	//---------------FileInfo----------------
+	log.Info("Creating file info table...")
+	createFileInfoTableSQL := `CREATE TABLE fileInfos (
+		"sha1" CHARACTER(64) NOT NULL PRIMARY KEY,
+		"filetype" VARCHAR(255) NOT NULL,
+		"extension" VARCHAR(255) NOT NULL
+	);`
+	statement1, err := db.Prepare(createFileInfoTableSQL) // Prepare SQL Statement
+	if err != nil {
+		return fmt.Errorf("error preparing file infos table (%v)", err)
 	}
+	_, err = statement1.Exec() // Execute SQL Statements
+	if err != nil {
+		return fmt.Errorf("error creating file infos table (%v)", err)
+	}
+	//---------------FileInfo----------------
 
-	filename := filepath.Base(de.Path)
+	//---------------File----------------
+	log.Info("Creating file table...")
+	createFileTableSQL := `CREATE TABLE files (
+		"sha1" CHARACTER(64) NOT NULL PRIMARY KEY,
+		"file" BLOB NOT NULL
+	);`
+	statement2, err := db.Prepare(createFileTableSQL) // Prepare SQL Statement
+	if err != nil {
+		return fmt.Errorf("error preparing files table (%v)", err)
+	}
+	_, err = statement2.Exec() // Execute SQL Statements
+	if err != nil {
+		return fmt.Errorf("error creating files table (%v)", err)
+	}
+	//---------------File----------------
 
-	hash := sha256.Sum256(fileBytes)
-  checksum := hex.EncodeToString(hash[:])
+	//---------------FileNames----------------
+	log.Info("Creating file name table...")
+	createFileNameTableSQL := `CREATE TABLE fileNames (
+		"id" INT AUTO INCREMENT PRIMARY KEY,
+		"sha1" CHARACTER(64) NOT NULL,
+		"name" VARCHAR(255) NOT NULL,
+		UNIQUE(sha1, name)
+	);`
+	statement3, err := db.Prepare(createFileNameTableSQL) // Prepare SQL Statement
+	if err != nil {
+		return fmt.Errorf("error preparing file names table (%v)", err)
+	}
+	_, err = statement3.Exec() // Execute SQL Statements
+	if err != nil {
+		return fmt.Errorf("error creating file names table (%v)", err)
+	}
+	//---------------FileNames----------------
 
-	fin.addFile(filename, checksum, mtype.String(), mtype.Extension(), fileBytes)
+	log.Info("Created file name table")
 
-  return []dirEntry.DirEntry{}, nil
+	return nil
 }

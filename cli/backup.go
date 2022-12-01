@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/jonathongardner/bhoto/fileInventory"
-	"github.com/jonathongardner/bhoto/hub"
+	"github.com/jonathongardner/bhoto/dirEntry"
+	"github.com/jonathongardner/bhoto/routines"
 
 	"github.com/urfave/cli/v2"
 	log "github.com/sirupsen/logrus"
@@ -53,36 +51,27 @@ var backupCommand =  &cli.Command{
 
 		maxNumberOfFileProcessors := c.Int("max")
 
-		log.Infof("Starting %v...", folder)
-
-		ctx, cancel := context.WithCancel(context.Background())
-
 		dbPath, err := getDatabasePath(c)
 		if err != nil {
 			return err
 		}
 
-		fin, err := fileInventory.NewFin()
+		routineController := routines.NewController(maxNumberOfFileProcessors)
+
+		log.Infof("Starting %v...", folder)
+
+		fin, err := fileInventory.NewFin(dbPath)
 		if err != nil {
 			return err
 		}
-		defer fin.Close()
-		go fin.StartDB(dbPath)
+		de, err := dirEntry.NewDirEntry(folder, fin)
+		if err != nil {
+			return err
+		}
 
-		// listen for ctrl + c and gracefully shutdown
-		go func() {
-			c := make(chan os.Signal, 1) // we need to reserve to buffer size 1, so the notifier are not blocked
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		routineController.GoBackground(fin)
+		routineController.Go(de)
 
-			<-c
-			log.Info("Gracefully Shuting down...")
-			cancel()
-		}()
-
-
-		h := hub.NewHub(folder, fin)
-		go h.Process(ctx, maxNumberOfFileProcessors)
-
-		return h.Wait()
+		return routineController.Wait()
 	},
 }
