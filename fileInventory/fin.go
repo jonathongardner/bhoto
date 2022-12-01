@@ -57,20 +57,46 @@ func (f *Fin) Run(rc *routines.Controller) error {
 	return nil
 }
 
-func SetupDB(path string) (error) {
-	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("database already exist (%v)", path)
+// https://zetcode.com/golang/sqlite3/
+func (f *Fin) Stats() error {
+	if !f.dbExist() {
+		return fmt.Errorf("database doesn't exist (%v)", f.path)
 	}
 
-	log.Infof("Creating database at %v", path)
-	file, err := os.Create(path)
+	db, _ := sql.Open("sqlite3", f.path)
+	defer db.Close()
+
+	fileNameStats := `SELECT count(distinct sha1) as uniqueFiles, count(name) as total FROM fileNames;`
+	statement1, err := db.Prepare(fileNameStats) // Prepare SQL Statement
 	if err != nil {
-		return fmt.Errorf("error opneing database (%v - %v)", path, err)
+		return fmt.Errorf("error getting filename stats (%v)", err)
+	}
+	var uniqueFiles string
+	var name string
+	err = statement1.QueryRow().Scan(&uniqueFiles, &name)
+	if err != nil {
+		return fmt.Errorf("error getting filename stats (%v)", err)
+	}
+	log.Infof("Unique Files: %v, Total: %v", uniqueFiles, name)
+
+	return nil
+}
+
+// Primary key and unique key add automatic indexes so no need to index those fields
+func (f *Fin) SetupDB() (error) {
+	if f.dbExist() {
+		return fmt.Errorf("database already exist (%v)", f.path)
+	}
+
+	log.Infof("Creating database at %v", f.path)
+	file, err := os.Create(f.path)
+	if err != nil {
+		return fmt.Errorf("error opneing database (%v - %v)", f.path, err)
 	}
 	file.Close()
 
 	log.Info("Opening database")
-	db, _ := sql.Open("sqlite3", path)
+	db, _ := sql.Open("sqlite3", f.path)
 	defer db.Close()
 
 	//---------------FileInfo----------------

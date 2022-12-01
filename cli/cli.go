@@ -5,21 +5,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jonathongardner/bhoto/fileInventory"
+
 	"github.com/urfave/cli/v2"
 	// "github.com/urfave/cli/v2/altsrc"
 	log "github.com/sirupsen/logrus"
 )
-func getDatabasePath(c *cli.Context) (string, error) {
+func getFin(c *cli.Context) (*fileInventory.Fin, error) {
 	folder := c.String("database")
 	if folder == "" {
 		var err error
 		folder, err = os.Getwd()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return filepath.Join(folder, ".bhoto.sqlite"), nil
+		folder = filepath.Join(folder, ".bhoto.sqlite")
 	}
-	return folder, nil
+
+	return fileInventory.NewFin(folder)
 }
 
 func Run() (error) {
@@ -83,6 +86,7 @@ func Run() (error) {
 		Commands: []*cli.Command{
 			initCommand,
 			backupCommand,
+			statsCommand,
 		},
 	}
 	return app.Run(os.Args)

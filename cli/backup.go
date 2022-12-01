@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jonathongardner/bhoto/fileInventory"
 	"github.com/jonathongardner/bhoto/dirEntry"
 	"github.com/jonathongardner/bhoto/routines"
 
@@ -51,16 +50,11 @@ var backupCommand =  &cli.Command{
 
 		maxNumberOfFileProcessors := c.Int("max")
 
-		dbPath, err := getDatabasePath(c)
-		if err != nil {
-			return err
-		}
-
 		routineController := routines.NewController(maxNumberOfFileProcessors)
 
 		log.Infof("Starting %v...", folder)
 
-		fin, err := fileInventory.NewFin(dbPath)
+		fin, err := getFin(c)
 		if err != nil {
 			return err
 		}
