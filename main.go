@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jonathongardner/bhoto/cli"
+	"github.com/jonathongardner/bemery/cli"
 
 	log "github.com/sirupsen/logrus"
 )

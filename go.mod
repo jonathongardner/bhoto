@@ -1,4 +1,4 @@
-module github.com/jonathongardner/bhoto
+module github.com/jonathongardner/bemery
 
 go 1.17
 

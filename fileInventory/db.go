@@ -1,14 +1,20 @@
 package fileInventory
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"strings"
 	// "time"
 
+	"github.com/gabriel-vasile/mimetype"
 	_ "github.com/mattn/go-sqlite3"
 	// log "github.com/sirupsen/logrus"
 )
 
-type image struct {
+type file struct {
   filename  string
 	sha1      string
   filetype  string
@@ -16,11 +22,28 @@ type image struct {
   fileBytes []byte
 }
 
-func (f *Fin) AddFile(filename string, sha1 string, filetype string, extension string, fileBytes []byte) {
-	f.db <- &image{filename: filename, sha1: sha1, filetype: filetype, extension: extension, fileBytes: fileBytes, }
+func (f *DB) AddFile(filename string, mtype *mimetype.MIME, reader io.Reader) (bool, error) {
+	group := strings.SplitN(mtype.String(), "/", 2)[0]
+	if group == "image" || group == "video" {
+		fileBytes, err := io.ReadAll(reader)
+		if err != nil {
+			return false, fmt.Errorf("Error reading rest of bytes (%v)", err)
+		}
+
+		hash := sha256.Sum256(fileBytes)
+		sha1 := hex.EncodeToString(hash[:])
+
+		if group == "image" {
+			f.db <- &file{filename: filename, sha1: sha1, filetype: mtype.String(), extension: mtype.Extension(), fileBytes: fileBytes, }
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
-func (fi *image) Run(db *sql.DB) error {
+func (fi *file) Run(db *sql.DB) error {
 	// time.Sleep(8 * time.Second)
   //---------------FileInfo----------------
   insertFileInfoSQL := `INSERT OR IGNORE INTO fileInfos(sha1, filetype, extension) VALUES (?, ?, ?)`

@@ -2,16 +2,13 @@ package dirEntry
 
 import (
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/jonathongardner/bhoto/fileInventory"
-	"github.com/jonathongardner/bhoto/routines"
+	"github.com/jonathongardner/bemery/fileInventory"
+	"github.com/jonathongardner/bemery/routines"
 
 	"github.com/gabriel-vasile/mimetype"
 	log "github.com/sirupsen/logrus"
@@ -89,38 +86,24 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 	}
 
 	mtype := mimetype.Detect(fileBytes)
-
-	if strings.HasPrefix(mtype.String(), "image") {
-		err = de.addFile(filepath.Base(de.Path), mtype, file)
-	} else if mtype.String() == "application/x-tar" {
-		err = de.iterateTar(file)
+	if mtype.String() == "application/x-tar" {
+		return nil, de.iterateTar(file)
 	} else if mtype.String() == "application/x-gtar" {
 		gzf, err := gzip.NewReader(file)
 		if err != nil {
 			return nil, fmt.Errorf("Error opening gzip (%v)", err)
 		}
-		err = de.iterateTar(gzf)
-	} else {
-		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
+
+		return nil, de.iterateTar(gzf)
 	}
 
+	added, err := de.fin.AddFile(filepath.Base(de.Path), mtype, file)
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, nil
-}
-
-func (de *DirEntry) addFile(filename string, mtype *mimetype.MIME, reader io.Reader) (error) {
-	fileBytes, err := io.ReadAll(reader)
-	if err != nil {
-		return fmt.Errorf("Error reading rest of bytes (%v)", err)
+	if !added {
+		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
 	}
-
-	hash := sha256.Sum256(fileBytes)
-  checksum := hex.EncodeToString(hash[:])
-
-	de.fin.AddFile(filename, checksum, mtype.String(), mtype.Extension(), fileBytes)
-
-  return nil
+	return nil, nil
 }

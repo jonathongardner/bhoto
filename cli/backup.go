@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jonathongardner/bhoto/dirEntry"
-	"github.com/jonathongardner/bhoto/routines"
+	"github.com/jonathongardner/bemery/dirEntry"
+	"github.com/jonathongardner/bemery/routines"
 
 	"github.com/urfave/cli/v2"
 	log "github.com/sirupsen/logrus"

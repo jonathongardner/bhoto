@@ -6,7 +6,6 @@ import (
 	"io"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
 	log "github.com/sirupsen/logrus"
@@ -34,14 +33,13 @@ func (de *DirEntry) iterateTar(reader io.Reader) error {
 			}
 
 			mtype := mimetype.Detect(fileBytes)
-			if strings.HasPrefix(mtype.String(), "image") {
-				err = de.addFile(filepath.Base(header.Name), mtype, tarBufReader)
-			} else {
-				log.Infof("Skipping %v not an image (%v)", header.Name, mtype.String())
-			}
-
+			added, err := de.fin.AddFile(filepath.Base(header.Name), mtype, tarBufReader)
 			if err != nil {
 				return fmt.Errorf("Error adding file in tar %v", err)
+			}
+
+			if !added {
+				log.Infof("Skipping %v not an image (%v)", header.Name, mtype.String())
 			}
 		}
 	}

@@ -5,31 +5,40 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jonathongardner/bhoto/routines"
+	"github.com/jonathongardner/bemery/routines"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type Fin struct {
-	path string
-	db   chan dbRunner
+	ImageDB   chan dbRunner
+	VideoDB   chan dbRunner
+}
+
+func NewFin(path string) (*Fin, error) {
+	return &Fin{ImageDB: make(chan dbRunner), ImageDB: make(chan dbRunner)}, nil
+}
+
+type DB struct {
+	path  string
+	input chan dbRunner
 }
 
 type dbRunner interface {
 	Run(db *sql.DB) error
 }
 
-func NewFin(path string) (*Fin, error) {
-	return &Fin{db: make(chan dbRunner), path: path}, nil
+func NewDB(path string, input chan dbRunner) (*DB, error) {
+	return &Fin{input: input, path: path}, nil
 }
 
-func (f *Fin) dbExist() bool {
+func (f *DB) dbExist() bool {
 	_, err := os.Stat(f.path)
 	return err == nil
 }
 
 // only run one cause dont want mulitple sqlite dbs open
-func (f *Fin) Run(rc *routines.Controller) error {
+func (f *DB) Run(rc *routines.Controller) error {
 	if !f.dbExist() {
 		return fmt.Errorf("database doesn't exist (%v)", f.path)
 	}
@@ -40,7 +49,7 @@ func (f *Fin) Run(rc *routines.Controller) error {
 	count := uint64(0)
 	f1: for {
 		select {
-		case dbRunner := <- f.db:
+		case dbRunner := <- f.input:
 			err := dbRunner.Run(db)
 			if err != nil {
 				log.Errorf("Error adding to db %v", err)
@@ -58,7 +67,7 @@ func (f *Fin) Run(rc *routines.Controller) error {
 }
 
 // https://zetcode.com/golang/sqlite3/
-func (f *Fin) Stats() error {
+func (f *DB) Stats() error {
 	if !f.dbExist() {
 		return fmt.Errorf("database doesn't exist (%v)", f.path)
 	}
@@ -83,7 +92,7 @@ func (f *Fin) Stats() error {
 }
 
 // Primary key and unique key add automatic indexes so no need to index those fields
-func (f *Fin) SetupDB() (error) {
+func (f *DB) SetupDB() (error) {
 	if f.dbExist() {
 		return fmt.Errorf("database already exist (%v)", f.path)
 	}

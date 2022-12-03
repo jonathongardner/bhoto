@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jonathongardner/bhoto/fileInventory"
+	"github.com/jonathongardner/bemery/fileInventory"
 
 	"github.com/urfave/cli/v2"
 	// "github.com/urfave/cli/v2/altsrc"
 	log "github.com/sirupsen/logrus"
 )
-func getFin(c *cli.Context) (*fileInventory.Fin, error) {
+func getFolder(c *cli.Context) (*fileInventory.Fin, error) {
 	folder := c.String("database")
 	if folder == "" {
 		var err error
