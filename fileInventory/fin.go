@@ -20,7 +20,7 @@ type dbRunner interface {
 }
 
 func NewFin(path string) (*Fin, error) {
-	return &Fin{db: make(chan dbRunner, 5), path: path}, nil
+	return &Fin{db: make(chan dbRunner), path: path}, nil
 }
 
 func (f *Fin) dbExist() bool {

@@ -1,8 +1,10 @@
 package dirEntry
 
 import (
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,9 +17,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// 100 MB
-// TODO: Config
-const maxFileSize int64 = 100 * 1024 *1024
+// https://github.com/gabriel-vasile/mimetype/blob/master/mimetype.go#L17
+const maxBytesFileDetect int64 = 3072
+
+func detectReadSize(s int64) int64 {
+	if maxBytesFileDetect > s {
+		return s
+	}
+	return maxBytesFileDetect
+}
 
 type DirEntry struct {
 	Path  string
@@ -63,28 +71,56 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
     return de.Children()
   }
 
-	if de.Size > maxFileSize {
-		log.Infof("Skipping %v larging then max size (%v - %v)", de.Path, de.Size, maxFileSize)
-		return nil, nil
-	}
-
-	fileBytes, err := os.ReadFile(de.Path)
+	file, err := os.Open(de.Path)
 	if err != nil {
 		return nil, fmt.Errorf("Error opening directory entry (%v)", err)
 	}
+	defer file.Close()
 
-	mtype := mimetype.Detect(fileBytes)
-	if !strings.HasPrefix(mtype.String(), "image") {
-		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
-		return nil, nil
+	// need to read atleast 512 for some reaons
+	fileBytes := make([]byte, detectReadSize(de.Size))
+	_, err = file.Read(fileBytes)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading bytes (%v)", err)
+	}
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("Error rewind (%v)", err)
 	}
 
-	filename := filepath.Base(de.Path)
+	mtype := mimetype.Detect(fileBytes)
+
+	if strings.HasPrefix(mtype.String(), "image") {
+		err = de.addFile(filepath.Base(de.Path), mtype, file)
+	} else if mtype.String() == "application/x-tar" {
+		err = de.iterateTar(file)
+	} else if mtype.String() == "application/x-gtar" {
+		gzf, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, fmt.Errorf("Error opening gzip (%v)", err)
+		}
+		err = de.iterateTar(gzf)
+	} else {
+		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (de *DirEntry) addFile(filename string, mtype *mimetype.MIME, reader io.Reader) (error) {
+	fileBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("Error reading rest of bytes (%v)", err)
+	}
 
 	hash := sha256.Sum256(fileBytes)
   checksum := hex.EncodeToString(hash[:])
 
 	de.fin.AddFile(filename, checksum, mtype.String(), mtype.Extension(), fileBytes)
 
-  return nil, nil
+  return nil
 }

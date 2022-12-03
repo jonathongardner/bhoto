@@ -122,7 +122,12 @@ func (c *Controller) run(maxNumberRunningThreads int) {
 
 func (c *Controller) gracefullyClose() {
   log.Debug("Gracefully Shuting down")
-  close(c.doneChan)
+  select {
+  case <- c.doneChan:
+    log.Debug("Already shuting down...")
+  default:
+    close(c.doneChan)
+  }
 }
 func (c *Controller) finish() {
   log.Debug("Closing")
