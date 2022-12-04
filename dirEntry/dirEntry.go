@@ -92,9 +92,11 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 
 	if strings.HasPrefix(mtype.String(), "image") {
 		err = de.addFile(filepath.Base(de.Path), mtype, file)
+	} else if mtype.String() == "application/zip" {
+		err = de.iterateZip(file, de.Size)
 	} else if mtype.String() == "application/x-tar" {
 		err = de.iterateTar(file)
-	} else if mtype.String() == "application/x-gtar" {
+	} else if mtype.String() == "application/gzip" {
 		gzf, err := gzip.NewReader(file)
 		if err != nil {
 			return nil, fmt.Errorf("Error opening gzip (%v)", err)
