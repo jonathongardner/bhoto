@@ -89,20 +89,22 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 
 	mtype := mimetype.Detect(fileBytes)
 
-	if strings.HasPrefix(mtype.String(), "image") {
-		err = de.addFile(filepath.Base(de.Path), file, mtype)
-	} else if mtype.String() == "application/zip" {
-		err = de.iterateZip(file, de.Size)
-	} else if mtype.String() == "application/x-tar" {
-		err = de.iterateTar(file)
-	} else if mtype.String() == "application/gzip" {
-		gzf, err := gzip.NewReader(file)
-		if err != nil {
-			return nil, fmt.Errorf("Error opening gzip (%v)", err)
+	added, err := de.addFile(de.Path, file, mtype)
+	if !added {
+		if mtype.String() == "application/zip" {
+			log.Debugf("Processing %v as zip", de.Path)
+			err = de.iterateZip(file, de.Size)
+		} else if mtype.String() == "application/x-tar" {
+			log.Debugf("Processing %v as tar", de.Path)
+			err = de.iterateTar(file)
+		} else if mtype.String() == "application/gzip" {
+			log.Debugf("Processing %v as gtar", de.Path)
+			gzf, err := gzip.NewReader(file)
+			if err != nil {
+				return nil, fmt.Errorf("Error opening gzip (%v)", err)
+			}
+			err = de.iterateTar(gzf)
 		}
-		err = de.iterateTar(gzf)
-	} else {
-		log.Infof("Skipping %v not an image (%v)", de.Path, mtype.String())
 	}
 
 	if err != nil {
@@ -112,17 +114,23 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 	return nil, nil
 }
 
-func (de *DirEntry) addFile(filename string, reader io.Reader, mtype *mimetype.MIME) (error) {
+func (de *DirEntry) addFile(path string, reader io.Reader, mtype *mimetype.MIME) (bool, error) {
+	mgroup := strings.SplitN(mtype.String(), "/", 2)[0]
+	// TODO: make config
+	if mgroup != "image" && mgroup != "video" {
+		log.Infof("Skipping %v not an image or video (%v - %v)", path, mgroup, mtype.String())
+		return false, nil
+	}
 	fileBytes, err := io.ReadAll(reader)
 	if err != nil {
-		return fmt.Errorf("Error reading rest of bytes (%v)", err)
+		return true, fmt.Errorf("Error reading rest of bytes (%v)", err)
 	}
 
-	img := photo.NewImageWithMagic(filename, fileBytes, mtype)
+	img := photo.NewImageWithMagic(filepath.Base(path), fileBytes, mtype)
 	img.SetChecksum()
 	img.SetExifInfo()
 
 	de.fin.AddFile(img)
 
-  return nil
+  return true, nil
 }

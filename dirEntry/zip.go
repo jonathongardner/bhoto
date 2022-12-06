@@ -5,11 +5,9 @@ import (
 	"bufio"
 	"io"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 func (de *DirEntry) iterateZip(reader io.ReaderAt, size int64) error {
@@ -39,11 +37,7 @@ func (de *DirEntry) iterateZip(reader io.ReaderAt, size int64) error {
 		}
 
 		mtype := mimetype.Detect(fileBytes)
-		if strings.HasPrefix(mtype.String(), "image") {
-			err = de.addFile(filepath.Base(file.Name), tarBufReader, mtype)
-		} else {
-			log.Infof("Skipping %v not an image (%v)", file.Name, mtype.String())
-		}
+		_, err = de.addFile(file.Name, tarBufReader, mtype)
 
 		fileInArchive.Close()
 

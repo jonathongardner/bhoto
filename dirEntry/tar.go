@@ -5,18 +5,15 @@ import (
 	"bufio"
 	"io"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
-	log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 )
 
 func (de *DirEntry) iterateTar(reader io.Reader) error {
 	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
-
 
 		if err != nil {
 			if err == io.EOF {
@@ -34,11 +31,7 @@ func (de *DirEntry) iterateTar(reader io.Reader) error {
 			}
 
 			mtype := mimetype.Detect(fileBytes)
-			if strings.HasPrefix(mtype.String(), "image") {
-				err = de.addFile(filepath.Base(header.Name), tarBufReader, mtype)
-			} else {
-				log.Infof("Skipping %v not an image (%v)", header.Name, mtype.String())
-			}
+			_, err = de.addFile(header.Name, tarBufReader, mtype)
 
 			if err != nil {
 				return fmt.Errorf("Error adding file in tar %v", err)
