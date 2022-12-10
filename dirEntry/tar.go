@@ -35,7 +35,7 @@ func (de *DirEntry) iterateTar(reader io.Reader) error {
 
 			mtype := mimetype.Detect(fileBytes)
 			if strings.HasPrefix(mtype.String(), "image") {
-				err = de.addFile(filepath.Base(header.Name), mtype, tarBufReader)
+				err = de.addFile(filepath.Base(header.Name), tarBufReader, mtype)
 			} else {
 				log.Infof("Skipping %v not an image (%v)", header.Name, mtype.String())
 			}

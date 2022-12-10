@@ -2,14 +2,13 @@ package dirEntry
 
 import (
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jonathongardner/bhoto/photo"
 	"github.com/jonathongardner/bhoto/fileInventory"
 	"github.com/jonathongardner/bhoto/routines"
 
@@ -91,7 +90,7 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 	mtype := mimetype.Detect(fileBytes)
 
 	if strings.HasPrefix(mtype.String(), "image") {
-		err = de.addFile(filepath.Base(de.Path), mtype, file)
+		err = de.addFile(filepath.Base(de.Path), file, mtype)
 	} else if mtype.String() == "application/zip" {
 		err = de.iterateZip(file, de.Size)
 	} else if mtype.String() == "application/x-tar" {
@@ -113,16 +112,17 @@ func (de *DirEntry) Run(rc *routines.Controller) ([]routines.Runner, error) {
 	return nil, nil
 }
 
-func (de *DirEntry) addFile(filename string, mtype *mimetype.MIME, reader io.Reader) (error) {
+func (de *DirEntry) addFile(filename string, reader io.Reader, mtype *mimetype.MIME) (error) {
 	fileBytes, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("Error reading rest of bytes (%v)", err)
 	}
 
-	hash := sha256.Sum256(fileBytes)
-  checksum := hex.EncodeToString(hash[:])
+	img := photo.NewImageWithMagic(filename, fileBytes, mtype)
+	img.SetChecksum()
+	img.SetExifInfo()
 
-	de.fin.AddFile(filename, checksum, mtype.String(), mtype.Extension(), fileBytes)
+	de.fin.AddFile(img)
 
   return nil
 }

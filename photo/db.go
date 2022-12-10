@@ -1,36 +1,35 @@
-package fileInventory
+package photo
 
 import (
-	"database/sql"
+  "database/sql"
 	// "time"
 
-	_ "github.com/mattn/go-sqlite3"
 	// log "github.com/sirupsen/logrus"
 )
 
-type image struct {
-  filename  string
-	sha1      string
-  filetype  string
-  extension string
-  fileBytes []byte
+func (fi *Image) UdateFileInto(db *sql.DB) error {
+  insertFileInfoSQL := `UPDATE fileInfos SET filetype = ?, extension = ?, taken = ? WHERE sha1 = ?`
+  // insertFileInfoSQL := `INSERT OR REPLACE INTO fileInfos(sha1, type) VALUES (?, ?)`
+  statement1, err := db.Prepare(insertFileInfoSQL)
+  if err != nil {
+    return err
+  }
+
+  _, err = statement1.Exec(fi.filetype, fi.extension, fi.taken, fi.sha256)
+  return err
 }
 
-func (f *Fin) AddFile(filename string, sha1 string, filetype string, extension string, fileBytes []byte) {
-	f.db <- &image{filename: filename, sha1: sha1, filetype: filetype, extension: extension, fileBytes: fileBytes, }
-}
-
-func (fi *image) Run(db *sql.DB) error {
+func (fi *Image) Run(db *sql.DB) error {
 	// time.Sleep(8 * time.Second)
   //---------------FileInfo----------------
-  insertFileInfoSQL := `INSERT OR IGNORE INTO fileInfos(sha1, filetype, extension) VALUES (?, ?, ?)`
+  insertFileInfoSQL := `INSERT OR IGNORE INTO fileInfos(sha1, filetype, extension, taken) VALUES (?, ?, ?, ?)`
 	// insertFileInfoSQL := `INSERT OR REPLACE INTO fileInfos(sha1, type) VALUES (?, ?)`
 	statement1, err := db.Prepare(insertFileInfoSQL)
 	if err != nil {
 		return err
 	}
 
-	_, err = statement1.Exec(fi.sha1, fi.extension, fi.extension)
+	_, err = statement1.Exec(fi.sha256, fi.filetype, fi.extension, fi.taken)
 	if err != nil {
 		return err
 	}
@@ -43,7 +42,7 @@ func (fi *image) Run(db *sql.DB) error {
 		return err
 	}
 
-	_, err = statement2.Exec(fi.sha1, fi.fileBytes)
+	_, err = statement2.Exec(fi.sha256, fi.fileBytes)
 	if err != nil {
 		return err
 	}
@@ -56,7 +55,7 @@ func (fi *image) Run(db *sql.DB) error {
 		return err
 	}
 
-	_, err = statement3.Exec(fi.sha1, fi.filename)
+	_, err = statement3.Exec(fi.sha256, fi.filename)
 	if err != nil {
 		return err
 	}

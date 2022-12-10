@@ -40,7 +40,7 @@ func (de *DirEntry) iterateZip(reader io.ReaderAt, size int64) error {
 
 		mtype := mimetype.Detect(fileBytes)
 		if strings.HasPrefix(mtype.String(), "image") {
-			err = de.addFile(filepath.Base(file.Name), mtype, tarBufReader)
+			err = de.addFile(filepath.Base(file.Name), tarBufReader, mtype)
 		} else {
 			log.Infof("Skipping %v not an image (%v)", file.Name, mtype.String())
 		}

@@ -59,7 +59,7 @@ func Run() (error) {
 
 	app := &cli.App{
 		Name: "bhoto",
-		Version: "0.0.1",
+		Version: "0.0.2",
 		Usage: "We got your back!",
 		Flags: flags,
 		Before: func(c *cli.Context) error {
@@ -87,6 +87,8 @@ func Run() (error) {
 			initCommand,
 			backupCommand,
 			statsCommand,
+			migrateCommand,
+			rebuildCommand,
 		},
 	}
 	return app.Run(os.Args)
