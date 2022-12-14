@@ -12,142 +12,70 @@ import (
   // log "github.com/sirupsen/logrus"
 )
 
-func jpegExifDump(data []byte) ([]exif.ExifTag, error) {
-  jmp := jpegstructure.NewJpegMediaParser()
-
-  intfc, err := jmp.ParseBytes(data)
-  if intfc == nil {
-    return nil, fmt.Errorf("Error reading jpeg exif data %v", err)
-  }
-
-  sl := intfc.(*jpegstructure.SegmentList)
-  _, _, et, err := sl.DumpExif()
-  if err != nil {
-    // if err == exif.ErrNoExif {
-    //   log.Infof("No EXIF %v (%v)", filename, err)
-    //   return
-    // }
-    return nil, fmt.Errorf("Error reading jpeg exif data %v", err)
-  }
-
-  return et, nil
+type MediaContext interface {
+	Exif() (rootIfd *exif.Ifd, data []byte, err error)
 }
-func pngExifDump(data []byte) ([]exif.ExifTag, error) {
-  png := pngstructure.NewPngMediaParser()
 
-  intfc, err := png.ParseBytes(data)
-  if intfc == nil {
-    return nil, fmt.Errorf("Error reading png exif data %v", err)
-  }
-
-  sl := intfc.(*jpegstructure.SegmentList)
-  _, _, et, err := sl.DumpExif()
-  if err != nil {
-    // if err == exif.ErrNoExif {
-    //   log.Infof("No EXIF %v (%v)", filename, err)
-    //   return
-    // }
-    return nil, fmt.Errorf("Error reading png exif data %v", err)
-  }
-
-  return et, nil
-}
-func tiffExifDump(data []byte) ([]exif.ExifTag, error) {
-  tiff := tiffstructure.NewTiffMediaParser()
-
-  intfc, err := tiff.ParseBytes(data)
-  if intfc == nil {
-    return nil, fmt.Errorf("Error reading tiff exif data %v", err)
-  }
-
-  sl := intfc.(*jpegstructure.SegmentList)
-  _, _, et, err := sl.DumpExif()
-  if err != nil {
-    // if err == exif.ErrNoExif {
-    //   log.Infof("No EXIF %v (%v)", filename, err)
-    //   return
-    // }
-    return nil, fmt.Errorf("Error reading tiff exif data %v", err)
-  }
-
-  return et, nil
-}
-func heicExifDump(data []byte) ([]exif.ExifTag, error) {
-  heic := heicexif.NewHeicExifMediaParser()
-
-  intfc, err := heic.ParseBytes(data)
-  if intfc == nil {
-    return nil, fmt.Errorf("Error reading tiff exif data %v", err)
-  }
-
-  sl := intfc.(*jpegstructure.SegmentList)
-  _, _, et, err := sl.DumpExif()
-  if err != nil {
-    // if err == exif.ErrNoExif {
-    //   log.Infof("No EXIF %v (%v)", filename, err)
-    //   return
-    // }
-    return nil, fmt.Errorf("Error reading tiff exif data %v", err)
-  }
-
-  return et, nil
-}
 
 func (fi *Image) SetExifInfo() error {
   if fi.filetype == "" {
     fi.SetMagicInfo()
   }
 
-  var et []exif.ExifTag
+  var mediaContext MediaContext
   var err error
   switch fi.filetype {
   case "image/jpeg":
-    et, err = jpegExifDump(fi.fileBytes)
+    jmp := jpegstructure.NewJpegMediaParser()
+    mediaContext, err = jmp.ParseBytes(fi.fileBytes)
   case "image/png", "image/vnd.mozilla.apng":
-    et, err = pngExifDump(fi.fileBytes)
+    png := pngstructure.NewPngMediaParser()
+    mediaContext, err = png.ParseBytes(fi.fileBytes)
   case "image/tiff":
-    et, err = tiffExifDump(fi.fileBytes)
+    tiff := tiffstructure.NewTiffMediaParser()
+    mediaContext, err = tiff.ParseBytes(fi.fileBytes)
   case "image/heic", "image/heic-sequence":
-    et, err = heicExifDump(fi.fileBytes)
+    heic := heicexif.NewHeicExifMediaParser()
+    mediaContext, err = heic.ParseBytes(fi.fileBytes)
   default:
     err = fmt.Errorf("Unknown filetype %v", fi.filetype)
   }
-
   if err != nil {
     return err
   }
 
+  rootIfd, _, err := mediaContext.Exif()
+  if err != nil {
+    return fmt.Errorf("Couldn't get root exif %v", err)
+  }
+
+
   var datetime string
   var offset string
-  for _, tag := range et {
-      switch tag.TagName {
-      case "DateTime":
-        datetime = tag.FormattedFirst
-      case "OffsetTime":
-        offset = tag.FormattedFirst
-      }
+  cb := func(ifd *exif.Ifd, ite *exif.IfdTagEntry) error {
+    var err error
+    // fmt.Printf("NAME=[%s] VALUE=[%v]\n", , )
+    switch ite.TagName() {
+    case "DateTime":
+      datetime, err = ite.FormatFirst()
+    case "OffsetTime":
+      offset, err = ite.FormatFirst()
+    }
+    if err != nil {
+      return err
+    }
+
+  	return nil
   }
+  err = rootIfd.EnumerateTagsRecursively(cb)
+  if err != nil {
+    return fmt.Errorf("Couldn't get exifs %v", err)
+  }
+
   t, err := time.Parse("2006:01:02 15:04:05 -07:00", datetime + " " + offset)
   if err != nil {
     return fmt.Errorf("Error parsing date %v", err)
   }
   fi.taken = t
   return nil
-  // for i, tag := range et {
-  //   // Since we dump the complete value, the thumbnails introduce
-  //   // too much noise.
-  //   if (tag.TagId == exif.ThumbnailOffsetTagId || tag.TagId == exif.ThumbnailSizeTagId) && tag.IfdPath == exif.ThumbnailFqIfdPath {
-  //     continue
-  //   }
-  //
-  //   if tag.TagName == "DateTime" || tag.TagName == "OffsetTime" {
-  //     fmt.Printf("%2d: IFD-PATH=[%s] ID=(0x%04x) NAME=[%s] TYPE=(%d):[%s] VALUE=[%v]", i, tag.IfdPath, tag.TagId, tag.TagName, tag.TagTypeId, tag.TagTypeName, tag.FormattedFirst)
-  //
-  //     if tag.ChildIfdPath != "" {
-  //       fmt.Printf(" CHILD-IFD-PATH=[%s]", tag.ChildIfdPath)
-  //     }
-  //
-  //     fmt.Printf("\n")
-  //   }
-  // }
 }

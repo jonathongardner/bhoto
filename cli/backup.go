@@ -12,18 +12,11 @@ import (
 )
 
 var backupCommand =  &cli.Command{
-	Name:    "backup",
-	Aliases: []string{"b"},
-	Usage:   "backup photos in folder",
+	Name:      "backup",
+	Aliases:   []string{"b"},
+	Usage:     "backup photos in folder",
+	ArgsUsage: "[folder]",
 	Flags: []cli.Flag {
-		&cli.StringFlag{
-			Name:    "folder",
-			Aliases: []string{"f"},
-			Value:   "",
-			DefaultText: "./",
-			Usage:   "Folder to look for photos to backup",
-			EnvVars: []string{"BOTO_FOLDER"},
-		},
 		&cli.IntFlag{
 			Name:    "max",
 			Aliases: []string{"m"},
@@ -39,7 +32,7 @@ var backupCommand =  &cli.Command{
 		},
 	},
 	Action:  func(c *cli.Context) error {
-		folder := c.String("folder")
+		folder := c.Args().Get(0)
 		if folder == "" {
 			var err error
 			folder, err = os.Getwd()

@@ -88,7 +88,6 @@ func Run() (error) {
 			backupCommand,
 			statsCommand,
 			migrateCommand,
-			rebuildCommand,
 		},
 	}
 	return app.Run(os.Args)
